@@ -1,3 +1,4 @@
+""" numpy implementation of Moody 2001 DRL trader by Matt Pearce """
 import numpy as np
 
 
@@ -9,10 +10,9 @@ class Env():
 
     def __init__(self, r, mu, TC, T, m, z):
         self.quantity = mu
-        self.transaction_costs = TC  #e.g. 0.002, 0.005, 0.01
+        self.transaction_costs = TC
         self.F_prev = 0.0
         self.T = T
-        # self.t = 1
         self.m = m
         self.r = r # returns  z{t} - z{t-1}
         self.z = z
@@ -26,7 +26,6 @@ class Env():
 
     def step(self, action):
         # print(self.t, 'F =', action)
-
         self.t += 1
 
         reward = self.get_reward(self.r[self.t+self.m-2], action)
@@ -77,19 +76,12 @@ class MoodyDRLAgent():
 
     def fit(self):
         T = len(self.F)
-
-
         dF = np.zeros([self.m + 2, T])
 
         for i in range(1, T):
-            # dzn = get_price_obs(i)
-
-            # It = np.concatenate([[1], dzn, [F[i-1]]])
             It = self.I[i]
-            dF[:,i] = (1 - np.power(np.tanh(self.theta*It), 2))*(It + self.theta[+1]*dF[:,i-1])
-            # dF[:,i] = (1 - np.power(np.tanh(self.theta*It), 2)) + (1 - np.power(np.tanh(self.theta*It), 2)) * (dF[:,i-1])
-#         print (theta)
-#         print (dF[:,i])
+            sech2 = 1 - np.power(np.tanh(np.dot(self.theta, It)), 2)
+            dF[:,i] = sech2 * (It + self.theta[-1] * dF[:,i-1])
 
         F = np.array(self.F)
 
@@ -98,11 +90,7 @@ class MoodyDRLAgent():
 
         dUt = dRtdFt * dF[:,1:] + dRtdFt1 * dF[:,0:-1]
 
-#         print (np.sum(dRtdFt1), np.sum(dUt,1))
-#         print(dF)
         self.theta = self.theta + self.rho * np.sum(dUt,1)
-#         print(np.sum(dUt,1))
-#         print (theta)
 
 
 
@@ -115,8 +103,8 @@ class MoodyDRLAgent():
 def training(tick_data):
     T = 1000        # training size
     m = 50          # number of prices in input feature window
-    mu = 1.
-    TC = 0.002
+    mu = 1.         # trade quantity
+    TC = 0.002      # transaction costs
 
 
     z = tick_data[:T + m] # training prices
@@ -159,12 +147,15 @@ def training(tick_data):
     print (agent.theta)
     print ("Buy and Hold PnL", z[-1]-z[0], 'v', total_reward[-1])
     import matplotlib.pyplot as plt
-    plt.subplot(3, 1, 1)
+    ax=plt.subplot(3, 1, 1)
     plt.plot(total_reward)
-    plt.subplot(3, 1, 2)
+    ax.set_title("Cum Reward per epoch")
+    ax=plt.subplot(3, 1, 2)
     plt.plot(z[m:])
-    plt.subplot(3, 1, 3)
-    plt.plot(agent.F)
+    ax.set_title("Time-series (prices)")
+    ax=plt.subplot(3, 1, 3)
+    plt.plot(np.round(agent.F))
+    ax.set_title("Trading signals")
     plt.show()
 
     return agent, env
@@ -172,7 +163,7 @@ def training(tick_data):
 
 if __name__ == '__main__':
     import moody_ts_gen
-
+    np.random.seed(0)
     tick_data = moody_ts_gen.generate_timeseries(10000)
     training(tick_data)
 
